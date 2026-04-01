@@ -1,0 +1,168 @@
+// This is your Prisma schema file for MongoDB
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products     Product[]
+  categories   Category[]
+  orders       Order[]
+  activityLogs ActivityLog[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+model Category {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
+  products    Product[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("categories")
+}
+
+enum ProductStatus {
+  ACTIVE
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+model Product {
+  id                String        @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  categoryId        String        @db.ObjectId
+  category          Category      @relation(fields: [categoryId], references: [id])
+  price             Float
+  stockQuantity     Int           @default(0)
+  minStockThreshold Int           @default(5)
+  status            ProductStatus @default(ACTIVE)
+  userId            String        @db.ObjectId
+  user              User          @relation(fields: [userId], references: [id])
+  orderItems        OrderItem[]
+  restockQueue      RestockQueue?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("products")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber  String      @unique
+  customerId   String
+  customerName String
+  userId       String      @db.ObjectId
+  user         User        @relation(fields: [userId], references: [id])
+  status       OrderStatus @default(PENDING)
+  totalPrice   Float       @default(0)
+  items        OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  orderId   String  @db.ObjectId
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+  subtotal  Float
+
+  @@map("order_items")
+}
+
+enum ActivityType {
+  ORDER_CREATED
+  ORDER_UPDATED
+  ORDER_CANCELLED
+  STOCK_UPDATED
+  PRODUCT_ADDED
+  PRODUCT_UPDATED
+  PRODUCT_DELETED
+  RESTOCK_QUEUED
+  RESTOCK_COMPLETED
+  USER_LOGIN
+  USER_SIGNUP
+}
+
+enum EntityType {
+  ORDER
+  PRODUCT
+  STOCK
+  USER
+  RESTOCK
+}
+
+model ActivityLog {
+  id         String       @id @default(auto()) @map("_id") @db.ObjectId
+  action     ActivityType
+  entityType EntityType
+  entityId   String
+  userId     String       @db.ObjectId
+  user       User         @relation(fields: [userId], references: [id])
+  details    String
+  timestamp  DateTime     @default(now())
+
+  @@map("activity_logs")
+}
+
+enum RestockPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum RestockStatus {
+  PENDING
+  COMPLETED
+  REMOVED
+}
+
+model RestockQueue {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  productId      String          @unique @db.ObjectId
+  product        Product         @relation(fields: [productId], references: [id])
+  priority       RestockPriority
+  quantityNeeded Int
+  status         RestockStatus   @default(PENDING)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("restock_queue")
+}

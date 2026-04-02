@@ -42,16 +42,14 @@ router.get('/metrics', authMiddleware, async (req: AuthRequest, res) => {
       },
     });
 
-    // Get low stock items
-    const lowStockItems = await prisma.product.count({
-      where: {
-        userId,
-        OR: [
-          { stockQuantity: 0 },
-          { stockQuantity: { lte: prisma.product.fields.minStockThreshold } },
-        ],
-      },
+    // Get low stock items (stockQuantity <= minStockThreshold)
+    const allProducts = await prisma.product.findMany({
+      where: { userId },
+      select: { stockQuantity: true, minStockThreshold: true },
     });
+    const lowStockItems = allProducts.filter(
+      (p) => p.stockQuantity <= p.minStockThreshold
+    ).length;
 
     // Get today's revenue
     const todayRevenueData = await prisma.order.aggregate({
@@ -181,37 +179,31 @@ router.get('/revenue', authMiddleware, async (req: AuthRequest, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const revenueData = await prisma.$queryRaw`
-      SELECT 
-        DATE("createdAt") as date,
-        SUM("totalPrice") as revenue
-      FROM orders
-      WHERE "userId" = ${userId}
-        AND "createdAt" >= ${startDate}
-        AND status != ${OrderStatus.CANCELLED}
-      GROUP BY DATE("createdAt")
-      ORDER BY date ASC
-    `;
+    const orders = await prisma.order.findMany({
+      where: {
+        userId,
+        createdAt: { gte: startDate },
+        status: { not: OrderStatus.CANCELLED },
+      },
+      select: { createdAt: true, totalPrice: true },
+    });
+
+    const revenueMap: Record<string, number> = {};
+    orders.forEach((order) => {
+      const date = order.createdAt.toISOString().split('T')[0];
+      revenueMap[date] = (revenueMap[date] || 0) + order.totalPrice;
+    });
+
+    const revenueData = Object.entries(revenueMap)
+      .map(([date, revenue]) => ({ date, revenue }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
       success: true,
       data: revenueData,
     });
   } catch (error) {
-    // Fallback to mock data if raw query fails
-    const mockData = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      return {
-        date: date.toISOString().split('T')[0],
-        revenue: Math.floor(Math.random() * 5000) + 3000,
-      };
-    });
-
-    res.json({
-      success: true,
-      data: mockData,
-    });
+    throw error;
   }
 });
 
@@ -224,36 +216,30 @@ router.get('/orders', authMiddleware, async (req: AuthRequest, res) => {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const orderData = await prisma.$queryRaw`
-      SELECT 
-        DATE("createdAt") as date,
-        COUNT(*) as orders
-      FROM orders
-      WHERE "userId" = ${userId}
-        AND "createdAt" >= ${startDate}
-      GROUP BY DATE("createdAt")
-      ORDER BY date ASC
-    `;
+    const orders = await prisma.order.findMany({
+      where: {
+        userId,
+        createdAt: { gte: startDate },
+      },
+      select: { createdAt: true },
+    });
+
+    const ordersMap: Record<string, number> = {};
+    orders.forEach((order) => {
+      const date = order.createdAt.toISOString().split('T')[0];
+      ordersMap[date] = (ordersMap[date] || 0) + 1;
+    });
+
+    const orderData = Object.entries(ordersMap)
+      .map(([date, count]) => ({ date, orders: count }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
       success: true,
       data: orderData,
     });
   } catch (error) {
-    // Fallback to mock data
-    const mockData = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      return {
-        date: date.toISOString().split('T')[0],
-        orders: Math.floor(Math.random() * 50) + 20,
-      };
-    });
-
-    res.json({
-      success: true,
-      data: mockData,
-    });
+    throw error;
   }
 });
 

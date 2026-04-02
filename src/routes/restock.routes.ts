@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../config/database.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.middleware.js';
-import { RestockPriority, RestockStatus } from '@prisma/client';
+import { RestockPriority } from '@prisma/client';
 
 const router = Router();
 
@@ -16,7 +16,7 @@ const updatePrioritySchema = z.object({
 });
 
 // Get all restock queue items
-router.get('/', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/', authMiddleware, async (_req: AuthRequest, res) => {
   try {
     const restockQueue = await prisma.restockQueue.findMany({
       where: {

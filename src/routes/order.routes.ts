@@ -13,6 +13,7 @@ const orderItemSchema = z.object({
 
 const createOrderSchema = z.object({
   customerName: z.string().min(2),
+  customerId: z.string().optional(),
   items: z.array(orderItemSchema).min(1),
 });
 
@@ -139,7 +140,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res) => {
 // Create order
 router.post('/', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { customerName, items } = createOrderSchema.parse(req.body);
+    const { customerName, customerId, items } = createOrderSchema.parse(req.body);
 
     // Validate products and check stock
     const productIds = items.map((item) => item.productId);
@@ -213,6 +214,7 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
       const createdOrder = await tx.order.create({
         data: {
           orderNumber,
+          customerId: customerId || `CUST-${Date.now()}`,
           customerName,
           userId: req.user!.id,
           status: OrderStatus.PENDING,
